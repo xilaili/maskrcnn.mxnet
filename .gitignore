@@ -80,3 +80,7 @@ target/
 *.params
 *.json
 .vscode/
+
+
+# mxnet
+mxnet/

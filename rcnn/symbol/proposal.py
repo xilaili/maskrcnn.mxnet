@@ -2,7 +2,6 @@
 Proposal Operator transform anchor coordinates into ROI coordinates with prediction results on
 classification probability and bounding box prediction results, and image size and scale information.
 """
-
 import mxnet as mx
 import numpy as np
 import numpy.random as npr
@@ -28,6 +27,7 @@ class ProposalOperator(mx.operator.CustomOp):
         self._rpn_post_nms_top_n = rpn_post_nms_top_n
         self._threshold = threshold
         self._rpn_min_size = rpn_min_size
+        print "initiated proposalOperator"
 
         logger.debug('feat_stride: %s' % self._feat_stride)
         logger.debug('anchors:\n%s' % self._anchors)
@@ -191,6 +191,7 @@ class ProposalProp(mx.operator.CustomOpProp):
         self._rpn_post_nms_top_n = int(rpn_post_nms_top_n)
         self._threshold = float(threshold)
         self._rpn_min_size = int(rpn_min_size)
+        print "ProposalProp class object initiated"
 
     def list_arguments(self):
         return ['cls_prob', 'bbox_pred', 'im_info']

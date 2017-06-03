@@ -22,9 +22,11 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch,
     config.TRAIN.BBOX_NORMALIZATION_PRECOMPUTED = True
 
     # load symbol
+    print "loading symbol..............."
     sym = eval('get_' + args.network + '_train')(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCHORS)
     feat_sym = sym.get_internals()['rpn_cls_score_output']
-
+    print "symbol loaded!!!!!!!!!"
+    
     # setup multi-gpu
     batch_size = len(ctx)
     input_batch_size = config.TRAIN.BATCH_IMAGES * batch_size
@@ -46,6 +48,10 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch,
                               feat_stride=config.RPN_FEAT_STRIDE, anchor_scales=config.ANCHOR_SCALES,
                               anchor_ratios=config.ANCHOR_RATIOS, aspect_grouping=config.TRAIN.ASPECT_GROUPING)
 
+	# print out training data shapes
+    pprint.pprint(train_data.provide_data)
+    pprint.pprint(train_data.provide_label)
+
     # infer max shape
     max_data_shape = [('data', (input_batch_size, 3, max([v[0] for v in config.SCALES]), max([v[1] for v in config.SCALES])))]
     max_data_shape, max_label_shape = train_data.infer_shape(max_data_shape)
@@ -54,11 +60,20 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch,
 
     # infer shape
     data_shape_dict = dict(train_data.provide_data + train_data.provide_label)
+    pprint.pprint(data_shape_dict)
     arg_shape, out_shape, aux_shape = sym.infer_shape(**data_shape_dict)
     arg_shape_dict = dict(zip(sym.list_arguments(), arg_shape))
     out_shape_dict = dict(zip(sym.list_outputs(), out_shape))
     aux_shape_dict = dict(zip(sym.list_auxiliary_states(), aux_shape))
     logger.info('output shape %s' % pprint.pformat(out_shape_dict))
+
+    # visualize symbol
+    internals = sym.get_internals()
+    _, out_shapes, _ = internals.infer_shape(**data_shape_dict)
+    shape_dict = dict(zip(internals.list_outputs(), out_shapes))
+    pprint.pprint(shape_dict)
+    a = mx.viz.plot_network(sym) #, shape={'data':(1,3,600,800), 'im_info':(1,3), 'gt_boxes':(1,2,5), 'label':(1,16650), 'bbox_target':(1,36,37,50), 'bbox_weight':(1,36,37,50)})
+    a.view('faster-rcnn')
 
     # load and initialize params
     if args.resume:

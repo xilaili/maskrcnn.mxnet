@@ -135,6 +135,8 @@ def main():
     args = parse_args()
     ctx = mx.gpu(args.gpu)
     symbol = get_vgg_test(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCHORS)
+    viz = mx.viz.plot_network(symbol, shape = {'data': (1, 3, 600, 800)})
+    viz.view('faster-rcnn')
     predictor = get_net(symbol, args.prefix, args.epoch, ctx)
     demo_net(predictor, args.image, args.vis)
 
