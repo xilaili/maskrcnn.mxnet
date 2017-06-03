@@ -97,11 +97,11 @@ default.pretrained = 'model/resnet-101'
 default.pretrained_epoch = 0
 default.base_lr = 0.001
 # default dataset
-default.dataset = 'PascalVOC'
-default.image_set = '2007_trainval'
-default.test_image_set = '2007_test'
-default.root_path = 'data'
-default.dataset_path = 'data/VOCdevkit'
+default.dataset = 'coco'
+default.image_set = 'train2014'
+default.test_image_set = 'val2014'
+default.root_path = '../data'
+default.dataset_path = '../data/coco'
 # default training
 default.frequent = 20
 default.kvstore = 'device'
@@ -145,8 +145,8 @@ dataset.coco = edict()
 dataset.coco.dataset = 'coco'
 dataset.coco.image_set = 'train2014'
 dataset.coco.test_image_set = 'val2014'
-dataset.coco.root_path = 'data'
-dataset.coco.dataset_path = 'data/coco'
+dataset.coco.root_path = '../data'
+dataset.coco.dataset_path = '../data/coco'
 dataset.coco.NUM_CLASSES = 81
 
 
