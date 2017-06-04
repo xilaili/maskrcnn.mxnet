@@ -9,7 +9,7 @@ from rcnn.symbol import *
 from rcnn.core import callback, metric
 from rcnn.core.loader import AnchorLoader
 from rcnn.core.module import MutableModule
-from rcnn.utils.load_data import load_gt_roidb, merge_roidb, filter_roidb
+from rcnn.utils.load_data import load_gt_sdsdb, load_gt_roidb, merge_roidb, filter_roidb
 from rcnn.utils.load_model import load_param
 
 
@@ -36,14 +36,16 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch,
 
     # load dataset and prepare imdb for training
     image_sets = [iset for iset in args.image_set.split('+')]
-    roidbs = [load_gt_roidb(args.dataset, image_set, args.root_path, args.dataset_path,
-                            flip=not args.no_flip)
+    sdsdbs = [load_gt_sdsdb(args.dataset, image_set, args.root_path, args.dataset_path,
+                            mask_size=config.MASK_SIZE, binary_thresh=config.BINARY_THRESH) #, flip=not args.no_flip)
               for image_set in image_sets]
-    roidb = merge_roidb(roidbs)
-    roidb = filter_roidb(roidb)
+    sdsdb = merge_roidb(sdsdbs)
+    sdsdb = filter_roidb(sdsdb)
+
+    # ..................................................
 
     # load training data
-    train_data = AnchorLoader(feat_sym, roidb, batch_size=input_batch_size, shuffle=not args.no_shuffle,
+    train_data = AnchorLoader(feat_sym, sdsdb, batch_size=input_batch_size, shuffle=not args.no_shuffle,
                               ctx=ctx, work_load_list=args.work_load_list,
                               feat_stride=config.RPN_FEAT_STRIDE, anchor_scales=config.ANCHOR_SCALES,
                               anchor_ratios=config.ANCHOR_RATIOS, aspect_grouping=config.TRAIN.ASPECT_GROUPING)
@@ -134,7 +136,7 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch,
     lr_epoch = [int(epoch) for epoch in lr_step.split(',')]
     lr_epoch_diff = [epoch - begin_epoch for epoch in lr_epoch if epoch > begin_epoch]
     lr = base_lr * (lr_factor ** (len(lr_epoch) - len(lr_epoch_diff)))
-    lr_iters = [int(epoch * len(roidb) / batch_size) for epoch in lr_epoch_diff]
+    lr_iters = [int(epoch * len(sdsdb) / batch_size) for epoch in lr_epoch_diff]
     logger.info('lr %f lr_epoch_diff %s lr_iters %s' % (lr, lr_epoch_diff, lr_iters))
     lr_scheduler = mx.lr_scheduler.MultiFactorScheduler(lr_iters, lr_factor)
     # optimizer

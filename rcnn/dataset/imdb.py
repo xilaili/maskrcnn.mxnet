@@ -17,7 +17,7 @@ from ..processing.bbox_transform import bbox_overlaps
 
 
 class IMDB(object):
-    def __init__(self, name, image_set, root_path, dataset_path):
+    def __init__(self, name, image_set, root_path, dataset_path, result_path=None):
         """
         basic information about an image database
         :param name: name of image database will be used for any output
@@ -28,6 +28,7 @@ class IMDB(object):
         self.image_set = image_set
         self.root_path = root_path
         self.data_path = dataset_path
+        self._result_path = result_path
 
         # abstract attributes
         self.classes = []
@@ -57,6 +58,13 @@ class IMDB(object):
             os.mkdir(cache_path)
         return cache_path
 
+    @property
+    def result_path(self):
+        if self._result_path and os.path.exists(self._result_path):
+            return self._result_path
+        else:
+            return self.cache_path
+
     def image_path_at(self, index):
         """
         access image at index in image database
@@ -67,9 +75,9 @@ class IMDB(object):
 
     def load_rpn_data(self, full=False):
         if full:
-            rpn_file = os.path.join(self.root_path, 'rpn_data', self.name + '_full_rpn.pkl')
+            rpn_file = os.path.join(self.result_path, 'rpn_data', self.name + '_full_rpn.pkl')
         else:
-            rpn_file = os.path.join(self.root_path, 'rpn_data', self.name + '_rpn.pkl')
+            rpn_file = os.path.join(self.result_path, 'rpn_data', self.name + '_rpn.pkl')
         assert os.path.exists(rpn_file), '%s rpn data not found at %s' % (self.name, rpn_file)
         logger.info('%s loading rpn data from %s' % (self.name, rpn_file))
         with open(rpn_file, 'rb') as f:
