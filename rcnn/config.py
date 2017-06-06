@@ -61,6 +61,9 @@ config.TRAIN.RPN_NMS_THRESH = 0.7
 config.TRAIN.RPN_PRE_NMS_TOP_N = 12000
 config.TRAIN.RPN_POST_NMS_TOP_N = 2000
 config.TRAIN.RPN_MIN_SIZE = config.RPN_FEAT_STRIDE
+# whether select from all rois or bg rois
+config.TRAIN.GAP_SELECT_FROM_ALL = True
+config.TRAIN.IGNORE_GAP = False
 # approximate bounding box regression
 config.TRAIN.BBOX_NORMALIZATION_PRECOMPUTED = False
 config.TRAIN.BBOX_MEANS = (0.0, 0.0, 0.0, 0.0)

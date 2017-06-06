@@ -47,6 +47,36 @@ def clip_boxes(boxes, im_shape):
     return boxes
 
 
+def filter_boxes(boxes, min_size):
+    """
+    filter small boxes.
+    :param boxes: [N, 4* num_classes]
+    :param min_size:
+    :return: keep:
+    """
+    ws = boxes[:, 2] - boxes[:, 0] + 1
+    hs = boxes[:, 3] - boxes[:, 1] + 1
+    keep = np.where((ws >= min_size) & (hs >= min_size))[0]
+    return keep
+
+
+def remove_repetition(boxes):
+    """
+    remove repetited boxes
+    :param boxes: [N, 4]
+    :return: keep:
+    """
+    _, x1_keep = np.unique(boxes[:, 0], return_index=True)
+    _, x2_keep = np.unique(boxes[:, 2], return_index=True)
+    _, y1_keep = np.unique(boxes[:, 1], return_index=True)
+    _, y2_keep = np.unique(boxes[:, 3], return_index=True)
+
+    x_keep = np.union1d(x1_keep, x2_keep)
+    y_keep = np.union1d(y1_keep, y2_keep)
+    keep = np.union1d(x_keep, y_keep)
+    return keep
+
+
 def nonlinear_transform(ex_rois, gt_rois):
     """
     compute bounding box regression targets from ex_rois to gt_rois

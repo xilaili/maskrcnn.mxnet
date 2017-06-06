@@ -1,6 +1,7 @@
 import mxnet as mx
 import proposal
 import proposal_target
+import proposal_annotator
 from rcnn.config import config
 
 eps = 2e-5
@@ -113,13 +114,20 @@ def get_resnet_train(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCH
 
     # ROI proposal target
     gt_boxes_reshape = mx.symbol.Reshape(data=gt_boxes, shape=(-1, 5), name='gt_boxes_reshape')
-    group = mx.symbol.Custom(rois=rois, gt_boxes=gt_boxes_reshape, op_type='proposal_target',
-                             num_classes=num_classes, batch_images=config.TRAIN.BATCH_IMAGES,
+    #group = mx.symbol.Custom(rois=rois, gt_boxes=gt_boxes_reshape, op_type='proposal_target',
+    #                        num_classes=num_classes, batch_images=config.TRAIN.BATCH_IMAGES,
+    #                         batch_rois=config.TRAIN.BATCH_ROIS, fg_fraction=config.TRAIN.FG_FRACTION)
+
+    group = mx.symbol.Custom(rois=rois, gt_boxes=gt_boxes_reshape, gt_masks=gt_masks, op_type='proposal_annotator',
+                             num_classes=num_classes, mask_size=config.MASK_SIZE, binary_thresh=config.BINARY_THRESH, 
+                             batch_images=config.TRAIN.BATCH_IMAGES,
                              batch_rois=config.TRAIN.BATCH_ROIS, fg_fraction=config.TRAIN.FG_FRACTION)
+	
     rois = group[0]
     label = group[1]
     bbox_target = group[2]
     bbox_weight = group[3]
+    mask_reg_targets = group[4]
 
     # Fast R-CNN
     roi_pool = mx.symbol.ROIPooling(
@@ -146,7 +154,7 @@ def get_resnet_train(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCH
     cls_prob = mx.symbol.Reshape(data=cls_prob, shape=(config.TRAIN.BATCH_IMAGES, -1, num_classes), name='cls_prob_reshape')
     bbox_loss = mx.symbol.Reshape(data=bbox_loss, shape=(config.TRAIN.BATCH_IMAGES, -1, 4 * num_classes), name='bbox_loss_reshape')
 
-    group = mx.symbol.Group([rpn_cls_prob, rpn_bbox_loss, cls_prob, bbox_loss, mx.symbol.BlockGrad(label), gt_masks])
+    group = mx.symbol.Group([rpn_cls_prob, rpn_bbox_loss, cls_prob, bbox_loss, mx.symbol.BlockGrad(label)])
     return group
 
 
