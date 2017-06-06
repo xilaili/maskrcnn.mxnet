@@ -42,7 +42,6 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch,
     sdsdb = merge_roidb(sdsdbs)
     sdsdb = filter_roidb(sdsdb)
 
-    # ..................................................
 
     # load training data
     train_data = AnchorLoader(feat_sym, sdsdb, batch_size=input_batch_size, shuffle=not args.no_shuffle,
@@ -51,17 +50,18 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch,
                               anchor_ratios=config.ANCHOR_RATIOS, aspect_grouping=config.TRAIN.ASPECT_GROUPING)
 
 	# print out training data shapes
-    pprint.pprint(train_data.provide_data)
-    pprint.pprint(train_data.provide_label)
+    pprint.pprint(train_data.provide_data_single)
+    pprint.pprint(train_data.provide_label_single)
 
     # infer max shape
     max_data_shape = [('data', (input_batch_size, 3, max([v[0] for v in config.SCALES]), max([v[1] for v in config.SCALES])))]
     max_data_shape, max_label_shape = train_data.infer_shape(max_data_shape)
     max_data_shape.append(('gt_boxes', (input_batch_size, 100, 5)))
+    max_data_shape.append(('gt_masks', (input_batch_size, 100, max([v[0] for v in config.SCALES]), max(v[1] for v in config.SCALES))))
     logger.info('providing maximum shape %s %s' % (max_data_shape, max_label_shape))
 
     # infer shape
-    data_shape_dict = dict(train_data.provide_data + train_data.provide_label)
+    data_shape_dict = dict(train_data.provide_data_single + train_data.provide_label_single)
     pprint.pprint(data_shape_dict)
     arg_shape, out_shape, aux_shape = sym.infer_shape(**data_shape_dict)
     arg_shape_dict = dict(zip(sym.list_arguments(), arg_shape))
@@ -74,8 +74,10 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch,
     _, out_shapes, _ = internals.infer_shape(**data_shape_dict)
     shape_dict = dict(zip(internals.list_outputs(), out_shapes))
     pprint.pprint(shape_dict)
-    a = mx.viz.plot_network(sym) #, shape={'data':(1,3,600,800), 'im_info':(1,3), 'gt_boxes':(1,2,5), 'label':(1,16650), 'bbox_target':(1,36,37,50), 'bbox_weight':(1,36,37,50)})
-    a.view('faster-rcnn')
+    a = mx.viz.plot_network(sym)
+    #a.view('faster-rcnn')
+
+    # ..................................................
 
     # load and initialize params
     if args.resume:
@@ -107,8 +109,8 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch,
 
     # create solver
     fixed_param_prefix = config.FIXED_PARAMS
-    data_names = [k[0] for k in train_data.provide_data]
-    label_names = [k[0] for k in train_data.provide_label]
+    data_names = [k[0] for k in train_data.provide_data_single]
+    label_names = [k[0] for k in train_data.provide_label_single]
     mod = MutableModule(sym, data_names=data_names, label_names=label_names,
                         logger=logger, context=ctx, work_load_list=args.work_load_list,
                         max_data_shapes=max_data_shape, max_label_shapes=max_label_shape,

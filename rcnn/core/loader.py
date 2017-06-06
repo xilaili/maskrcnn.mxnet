@@ -6,6 +6,7 @@ from rcnn.config import config
 from rcnn.io.image import tensor_vstack
 from rcnn.io.rpn import get_rpn_testbatch, get_rpn_batch, assign_anchor
 from rcnn.io.rcnn import get_rcnn_testbatch, get_rcnn_batch
+from rcnn.mask.mask_transform import get_gt_masks
 
 
 class TestLoader(mx.io.DataIter):
@@ -253,7 +254,7 @@ class AnchorLoader(mx.io.DataIter):
 
         # decide data and label names
         if config.TRAIN.END2END:
-            self.data_name = ['data', 'im_info', 'gt_boxes']
+            self.data_name = ['data', 'im_info', 'gt_boxes', 'gt_masks']
         else:
             self.data_name = ['data']
         self.label_name = ['label', 'bbox_target', 'bbox_weight']
@@ -266,8 +267,26 @@ class AnchorLoader(mx.io.DataIter):
 
         # get first batch to fill in provide_data and provide_label
         self.reset()
-        self.get_batch()
+        self.get_batch_parallel()
 
+    @property
+    def provide_data(self):
+        return [[(k, v.shape) for k, v in zip(self.data_name, self.data[i])] for i in xrange(len(self.data))]
+
+    @property
+    def provide_label(self):
+        return [[(k, v.shape) for k, v in zip(self.label_name, self.label[i])] for i in xrange(len(self.label))]
+
+    @property
+    def provide_data_single(self):
+        return [(k, v.shape) for k, v in zip(self.data_name, self.data[0])]
+
+    @property
+    def provide_label_single(self):
+        return [(k, v.shape) for k, v in zip(self.label_name, self.label[0])]
+
+    # old provide data and label
+    '''
     @property
     def provide_data(self):
         return [(k, v.shape) for k, v in zip(self.data_name, self.data)]
@@ -275,7 +294,7 @@ class AnchorLoader(mx.io.DataIter):
     @property
     def provide_label(self):
         return [(k, v.shape) for k, v in zip(self.label_name, self.label)]
-
+    '''
     def reset(self):
         self.cur = 0
         if self.shuffle:
@@ -300,7 +319,7 @@ class AnchorLoader(mx.io.DataIter):
 
     def next(self):
         if self.iter_next():
-            self.get_batch()
+            self.get_batch_parallel()
             self.cur += self.batch_size
             return mx.io.DataBatch(data=self.data, label=self.label,
                                    pad=self.getpad(), index=self.getindex(),
@@ -390,3 +409,61 @@ class AnchorLoader(mx.io.DataIter):
 
         self.data = [mx.nd.array(all_data[key]) for key in self.data_name]
         self.label = [mx.nd.array(all_label[key]) for key in self.label_name]
+
+    def get_batch_parallel(self):
+        '''
+        this is used for mask rcnn
+        '''
+        cur_from = self.cur
+        cur_to = min(cur_from + self.batch_size, self.size)
+        roidb = [self.roidb[self.index[i]] for i in range(cur_from, cur_to)]
+        # decide multi-devcie slice
+        work_load_list = self.work_load_list
+        ctx = self.ctx
+        if work_load_list is None:
+            work_load_list = [1] * len(ctx)
+        assert isinstance(work_load_list, list) and len(work_load_list) == len(ctx), \
+            'Invalid settings for work load.'
+        slices = _split_input_slice(self.batch_size, work_load_list)
+        # call parallel
+        iroidb = range(len(slices))
+        for idx, islice in enumerate(slices):
+            iroidb[idx] = [roidb[i] for i in range(islice.start, islice.stop)]
+
+        data = []
+        label = []
+
+        for roidb in iroidb:
+            rst = self.parfetch(roidb)
+            data.append([mx.nd.array(rst['data'][key]) for key in self.data_name])
+            label.append([mx.nd.array(rst['label'][key]) for key in self.label_name])
+
+        self.data = data
+        self.label = label
+
+    def parfetch(self, roidb):
+        # get data for multi-gpu
+        data, label = get_rpn_batch(roidb)
+
+        data_shape = {k: v.shape for k, v in data.items()}
+        # not use im info for RPN training
+        del data_shape['im_info']
+        _, feat_shape, _ = self.feat_sym.infer_shape(**data_shape)
+        feat_shape = [int(i) for i in feat_shape[0]]
+
+        # add gt_boxes to data for e2e
+        data['gt_boxes'] = label['gt_boxes'][np.newaxis, :, :]
+
+        # add gt_masks to data for e2e
+        assert len(roidb) == 1
+        gt_masks = get_gt_masks(roidb[0]['cache_seg_inst'], data['im_info'][0,:2].astype('int'))
+        data['gt_masks'] = gt_masks
+
+        # assign anchor for label
+        label = assign_anchor(feat_shape, label['gt_boxes'], data['im_info'],
+                              self.feat_stride, self.anchor_scales,
+                              self.anchor_ratios, self.allowed_border)
+
+        return {'data': data, 'label': label}
+
+

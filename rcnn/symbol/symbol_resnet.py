@@ -60,9 +60,11 @@ def get_resnet_conv(data):
 
 
 def get_resnet_train(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCHORS):
+    print 'Getting resnet training symbol'
     data = mx.symbol.Variable(name="data")
     im_info = mx.symbol.Variable(name="im_info")
     gt_boxes = mx.symbol.Variable(name="gt_boxes")
+    gt_masks = mx.symbol.Variable(name="gt_masks")
     rpn_label = mx.symbol.Variable(name='label')
     rpn_bbox_target = mx.symbol.Variable(name='bbox_target')
     rpn_bbox_weight = mx.symbol.Variable(name='bbox_weight')
@@ -144,7 +146,7 @@ def get_resnet_train(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCH
     cls_prob = mx.symbol.Reshape(data=cls_prob, shape=(config.TRAIN.BATCH_IMAGES, -1, num_classes), name='cls_prob_reshape')
     bbox_loss = mx.symbol.Reshape(data=bbox_loss, shape=(config.TRAIN.BATCH_IMAGES, -1, 4 * num_classes), name='bbox_loss_reshape')
 
-    group = mx.symbol.Group([rpn_cls_prob, rpn_bbox_loss, cls_prob, bbox_loss, mx.symbol.BlockGrad(label)])
+    group = mx.symbol.Group([rpn_cls_prob, rpn_bbox_loss, cls_prob, bbox_loss, mx.symbol.BlockGrad(label), gt_masks])
     return group
 
 

@@ -323,6 +323,7 @@ def get_vgg_train(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCHORS
     data = mx.symbol.Variable(name="data")
     im_info = mx.symbol.Variable(name="im_info")
     gt_boxes = mx.symbol.Variable(name="gt_boxes")
+    gt_masks = mx.symbol.Variable(name="gt_masks")
     rpn_label = mx.symbol.Variable(name='label')
     rpn_bbox_target = mx.symbol.Variable(name='bbox_target')
     rpn_bbox_weight = mx.symbol.Variable(name='bbox_weight')

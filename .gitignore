@@ -84,3 +84,5 @@ target/
 
 # mxnet
 mxnet/
+faster-rcnn
+faster-rcnn.pdf
