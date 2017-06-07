@@ -50,7 +50,7 @@ class ProposalAnnotatorOperator(mx.operator.CustomOp):
         rois, labels, bbox_targets, bbox_weights, mask_reg_targets = \
             self.sample_rois(all_rois, fg_rois_per_image, rois_per_image, self._num_classes,
                              gt_boxes=gt_boxes, gt_masks=gt_masks)
-        print rois.shape, labels.shape, bbox_targets.shape, bbox_weights.shape, mask_reg_targets.shape
+        #print rois.shape, labels.shape, bbox_targets.shape, bbox_weights.shape, mask_reg_targets.shape
 
         for ind, val in enumerate([rois, labels, bbox_targets, bbox_weights, mask_reg_targets]):
             self.assign(out_data[ind], req[ind], val)

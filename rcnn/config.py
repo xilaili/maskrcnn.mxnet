@@ -17,7 +17,7 @@ config.SCALES = [(600, 1000)]  # first is scale (the shorter side); second is ma
 config.ANCHOR_SCALES = (8, 16, 32)
 config.ANCHOR_RATIOS = (0.5, 1, 2)
 config.NUM_ANCHORS = len(config.ANCHOR_SCALES) * len(config.ANCHOR_RATIOS)
-config.MASK_SIZE = 21
+config.MASK_SIZE = 14
 config.BINARY_THRESH = 0.4
 
 config.TRAIN = edict()

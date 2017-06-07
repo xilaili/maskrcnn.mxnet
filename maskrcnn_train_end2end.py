@@ -49,7 +49,7 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch,
                               feat_stride=config.RPN_FEAT_STRIDE, anchor_scales=config.ANCHOR_SCALES,
                               anchor_ratios=config.ANCHOR_RATIOS, aspect_grouping=config.TRAIN.ASPECT_GROUPING)
 
-	# print out training data shapes
+    # print out training data shapes
     pprint.pprint(train_data.provide_data_single)
     pprint.pprint(train_data.provide_label_single)
 
