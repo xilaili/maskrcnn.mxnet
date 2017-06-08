@@ -151,9 +151,11 @@ def get_resnet_train(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCH
     # mask prediction
     mask_pred1 = mx.symbol.Deconvolution(name='mask_pred1', data=relu1, kernel=(2,2), stride=(2,2), num_filter=256, workspace=1024)
     # whether to add relu here?
-    mask_pred2 = mx.symbol.Convolution(name='mask_pred2', data=mask_pred1, kernel=(1,1), pad=(0,0), num_filter=num_classes-1)
+    mask_pred2 = mx.symbol.Convolution(name='mask_pred2', data=mask_pred1, kernel=(1,1), pad=(0,0), num_filter=2*(num_classes-1))
     # write an operator to compute mask losses
-
+    label_mask = mx.sym.Reshape(name='label_mask', data=label, shape=(-1, 1, 1, 1))
+    mask_pred3 = mx.contrib.sym.ChannelOperator(name='mask_pred3', data=mask_pred2, pick_idx=label_mask, group=num_classes-1, op_type='Group_Pick', pick_type='Label_Pick')
+    mask_prob = mx.sym.SoftmaxOutput(name='mask_prob', data=mask_pred3, label=mask_reg_targets, multi_output=True, normalization='null', use_ignore=True, ignore_label=-1, grad_scale=10.0 / config.TRAIN.BATCH_ROIS)
 
 
     # reshape output
@@ -161,7 +163,7 @@ def get_resnet_train(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCH
     cls_prob = mx.symbol.Reshape(data=cls_prob, shape=(config.TRAIN.BATCH_IMAGES, -1, num_classes), name='cls_prob_reshape')
     bbox_loss = mx.symbol.Reshape(data=bbox_loss, shape=(config.TRAIN.BATCH_IMAGES, -1, 4 * num_classes), name='bbox_loss_reshape')
 
-    group = mx.symbol.Group([rpn_cls_prob, rpn_bbox_loss, cls_prob, bbox_loss, mx.symbol.BlockGrad(label), mask_pred2])
+    group = mx.symbol.Group([rpn_cls_prob, rpn_bbox_loss, cls_prob, bbox_loss, mx.symbol.BlockGrad(label), mask_prob, mx.sym.BlockGrad(mask_reg_targets)])
     return group
 
 
