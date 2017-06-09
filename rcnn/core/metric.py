@@ -11,7 +11,7 @@ def get_rpn_names():
 
 
 def get_rcnn_names():
-    pred = ['rcnn_cls_prob', 'rcnn_bbox_loss']
+    pred = ['rcnn_cls_prob', 'rcnn_bbox_loss', 'mask_prob', 'mask_reg_target']
     label = ['rcnn_label', 'rcnn_bbox_target', 'rcnn_bbox_weight']
     if config.TRAIN.END2END:
         pred.append('rcnn_label')
@@ -153,3 +153,30 @@ class RCNNL1LossMetric(mx.metric.EvalMetric):
 
         self.sum_metric += np.sum(bbox_loss)
         self.num_inst += num_inst
+
+class MaskLossMetric(mx.metric.EvalMetric):
+    def __init__(self):
+        super(MaskLossMetric, self).__init__('MaskLoss')
+        self.e2e = config.TRAIN.END2END
+        self.pred, self.label = get_rcnn_names()
+
+    def update(self, labels, preds):
+        mask_loss = preds[self.pred.index('mask_prob')]
+        if self.e2e:
+            label = preds[self.pred.index('mask_reg_target')]
+        else:
+            raise NotImplementedError
+        mask_size = mask_loss.shape[2]
+        label = label.asnumpy().astype('int32').reshape((-1))
+        mask_loss = mx.nd.transpose(mask_loss.reshape((mask_loss.shape[0], mask_loss.shape[1], mask_size * mask_size)), axes=(0, 2, 1))
+        mask_loss = mask_loss.reshape((label.shape[0], 2))
+        mask_loss = mask_loss.asnumpy()
+        keep_inds = np.where(label != -1)[0]
+        label = label[keep_inds]
+        cls = mask_loss[keep_inds, label]
+        cls += 1e-14
+        cls_loss = -1 * np.log(cls)
+        cls_loss = np.sum(cls_loss)
+
+        self.sum_metric += cls_loss
+        self.num_inst += len(keep_inds)
