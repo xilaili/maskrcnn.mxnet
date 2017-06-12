@@ -119,7 +119,7 @@ class coco(IMDB):
         """
         # for internal useage
         tic();
-        gt_sdsdb_temp = [self.load_coco_sds_annotation(index) for index in self.image_set_index[:250]]
+        gt_sdsdb_temp = [self.load_coco_sds_annotation(index) for index in self.image_set_index[:10000]]
         gt_sdsdb = [x[0] for x in gt_sdsdb_temp]
         print 'prepare gt_sdsdb using', toc(), 'seconds';
         #objs = [x[1] for x in gt_sdsdb_temp]

@@ -47,14 +47,17 @@ def intersect_box_mask(ex_box, gt_box, gt_mask):
     y2 = min(ex_box[3], gt_box[3])
     if x1 > x2 or y1 > y2:
         return np.zeros((21, 21), dtype=bool)
+    #print x1, y1, x2, y2
     w = x2 - x1 + 1
     h = y2 - y1 + 1
     ex_starty = y1 - ex_box[1]
     ex_startx = x1 - ex_box[0]
+    #print w, h, ex_starty, ex_startx
 
     inter_maskb = gt_mask[y1:y2+1 , x1:x2+1]
     regression_target = np.zeros((ex_box[3] - ex_box[1] + 1, ex_box[2] - ex_box[0] + 1))
-    regression_target[ex_starty: ex_starty + h, ex_startx: ex_startx + w] = inter_maskb
+    #print gt_mask.shape, inter_maskb.shape, regression_target.shape
+    regression_target[ex_starty: ex_starty + inter_maskb.shape[0], ex_startx: ex_startx + inter_maskb.shape[1]] = inter_maskb
 
     return regression_target
 
