@@ -151,10 +151,10 @@ def get_resnet_train(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCH
     # mask prediction
     mask_pred1 = mx.symbol.Deconvolution(name='mask_pred1', data=relu1, kernel=(2,2), stride=(2,2), num_filter=256, workspace=1024)
     # whether to add relu here?
-    mask_pred2 = mx.symbol.Convolution(name='mask_pred2', data=mask_pred1, kernel=(1,1), pad=(0,0), num_filter=2*(num_classes-1))
+    mask_pred2 = mx.symbol.Convolution(name='mask_pred2', data=mask_pred1, kernel=(1,1), pad=(0,0), num_filter=2*num_classes)
     # write an operator to compute mask losses
     label_mask = mx.sym.Reshape(name='label_mask', data=label, shape=(-1, 1, 1, 1))
-    mask_pred3 = mx.contrib.sym.ChannelOperator(name='mask_pred3', data=mask_pred2, pick_idx=label_mask, group=num_classes-1, op_type='Group_Pick', pick_type='Label_Pick')
+    mask_pred3 = mx.contrib.sym.ChannelOperator(name='mask_pred3', data=mask_pred2, pick_idx=label_mask, group=num_classes, op_type='Group_Pick', pick_type='Label_Pick')
     mask_prob = mx.sym.SoftmaxOutput(name='mask_prob', data=mask_pred3, label=mask_reg_targets, multi_output=True, normalization='null', use_ignore=True, ignore_label=-1, grad_scale=10.0 / config.TRAIN.BATCH_ROIS)
 
 
@@ -221,11 +221,17 @@ def get_resnet_test(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCHO
     cls_prob = mx.symbol.softmax(name='cls_prob', data=cls_score)
     # bounding box regression
     bbox_pred = mx.symbol.FullyConnected(name='bbox_pred', data=pool1, num_hidden=num_classes * 4)
+    # mask prediction
+    mask_pred1 = mx.symbol.Deconvolution(name='mask_pred1', data=relu1, kernel=(2,2), stride=(2,2), num_filter=256, workspace=1024)
+    mask_pred2 = mx.symbol.Convolution(name='mask_pred2', data=mask_pred1, kernel=(1,1), pad=(0,0), num_filter=2*num_classes)
+    mask_score = mx.sym.Reshape(name='mask_score', data=cls_prob, shape=(-1, num_classes, 1, 1))
+    mask_softmax = mx.contrib.sym.ChannelOperator(name='mask_softmax', data=mask_pred2, group=num_classes, op_type='Group_Softmax')
+    mask_pred = mx.contrib.sym.ChannelOperator(name='mask_pred', data=mask_softmax, pick_idx=mask_score, group=num_classes, op_type='Group_Pick', pick_type='Score_Pick')
 
     # reshape output
     cls_prob = mx.symbol.Reshape(data=cls_prob, shape=(config.TEST.BATCH_IMAGES, -1, num_classes), name='cls_prob_reshape')
     bbox_pred = mx.symbol.Reshape(data=bbox_pred, shape=(config.TEST.BATCH_IMAGES, -1, 4 * num_classes), name='bbox_pred_reshape')
 
     # group output
-    group = mx.symbol.Group([rois, cls_prob, bbox_pred])
+    group = mx.symbol.Group([rois, cls_prob, bbox_pred, mask_pred])
     return group
