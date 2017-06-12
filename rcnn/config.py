@@ -12,7 +12,7 @@ config.FIXED_PARAMS = ['conv1', 'conv2']
 config.FIXED_PARAMS_SHARED = ['conv1', 'conv2', 'conv3', 'conv4', 'conv5']
 
 # dataset related params
-config.NUM_CLASSES = 21
+config.NUM_CLASSES = 81
 config.SCALES = [(600, 1000)]  # first is scale (the shorter side); second is max size
 config.ANCHOR_SCALES = (8, 16, 32)
 config.ANCHOR_RATIOS = (0.5, 1, 2)
@@ -73,7 +73,7 @@ config.TEST = edict()
 
 # R-CNN testing
 # use rpn to generate proposal
-config.TEST.HAS_RPN = False
+config.TEST.HAS_RPN = True
 # size of images for each device
 config.TEST.BATCH_IMAGES = 1
 
@@ -92,6 +92,11 @@ config.TEST.PROPOSAL_MIN_SIZE = config.RPN_FEAT_STRIDE
 
 # RCNN nms
 config.TEST.NMS = 0.3
+
+# mask merge
+config.TEST.USE_MASK_MERGE = True
+config.TEST.USE_GPU_MASK_MERGE = False
+config.TEST.MASK_MERGE_THRESH = 0.5
 
 # default settings
 default = edict()
