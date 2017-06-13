@@ -115,26 +115,38 @@ def generate_proposals(predictor, test_data, imdb, vis=False, thresh=0.):
 def im_detect(predictor, data_batch, data_names, scales):
     output_all = predictor.predict(data_batch)
     data_dict_all = [dict(zip(data_names, data_batch.data[i])) for i in xrange(len(data_batch.data))]
+    print len(data_dict_all)
     scores_all = []
     pred_boxes_all = []
     pred_masks_all = []
+    rois_all = []
     for output, data_dict, scale in zip(output_all, data_dict_all, scales):
         if config.TEST.HAS_RPN:
             rois = output['rois_output'].asnumpy()[:, 1:]
         else:
             raise NotImplementedError
+        im_shape = data_dict['data'].shape
         # save output
         scores = output['cls_prob_reshape_output'].asnumpy()[0]
+        bbox_deltas = output['bbox_pred_reshape_output'].asnumpy()[0]
         pred_masks = output['mask_pred_output'].asnumpy()
 
+        # post processing
+        pred_boxes = bbox_pred(rois, bbox_deltas)
+        pred_boxes = clip_boxes(pred_boxes, im_shape[-2:])
+
         # we used scaled image & roi to train, so it is necessary to transform them back
-        pred_boxes = rois / scale
+        rois = rois / scale
+        pred_boxes = pred_boxes / scale
+
+        print scores.shape, rois.shape, pred_boxes.shape, pred_masks.shape
 
         scores_all.append(scores)
+        rois_all.append(rois)
         pred_boxes_all.append(pred_boxes)
         pred_masks_all.append(pred_masks)
 
-    return scores_all, pred_boxes_all, pred_masks_all, data_dict_all
+    return scores_all, rois_all, pred_boxes_all, pred_masks_all, data_dict_all
 
 
 def pred_eval(predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, logger=None, ignore_cache=False):
