@@ -115,7 +115,6 @@ def generate_proposals(predictor, test_data, imdb, vis=False, thresh=0.):
 def im_detect(predictor, data_batch, data_names, scales):
     output_all = predictor.predict(data_batch)
     data_dict_all = [dict(zip(data_names, data_batch.data[i])) for i in xrange(len(data_batch.data))]
-    print len(data_dict_all)
     scores_all = []
     pred_boxes_all = []
     pred_masks_all = []
@@ -139,7 +138,7 @@ def im_detect(predictor, data_batch, data_names, scales):
         rois = rois / scale
         pred_boxes = pred_boxes / scale
 
-        print scores.shape, rois.shape, pred_boxes.shape, pred_masks.shape
+        #print scores.shape, rois.shape, pred_boxes.shape, pred_masks.shape
 
         scores_all.append(scores)
         rois_all.append(rois)

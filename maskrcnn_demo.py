@@ -35,7 +35,7 @@ CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train',
 config.NUM_CLASSES = 81
 DATA_NAMES = ['data', 'im_info']
 LABEL_NAMES = []
-CONF_THRESH = 0.9
+CONF_THRESH = 0.7
 NMS_THRESH = 0.3
 
 def load_data():
@@ -64,7 +64,7 @@ def get_net(data, sym, prefix, epoch, ctx):
     provide_data = [[(k, v.shape) for k, v in zip(DATA_NAMES, data[i])] for i in xrange(len(data))]
     provide_label = [None for i in xrange(len(data))]
     arg_params, aux_params = load_param(prefix, epoch, process=True)
-    print DATA_NAMES, LABEL_NAMES, ctx, max_data_shape, provide_data, provide_label
+    #print DATA_NAMES, LABEL_NAMES, ctx, max_data_shape, provide_data, provide_label
     predictor = Predictor(sym, DATA_NAMES, LABEL_NAMES,
                           context=[ctx], max_data_shapes=max_data_shape,
                           provide_data=provide_data, provide_label=provide_label,
@@ -92,7 +92,6 @@ def demo_net(predictor, data, image_names, im_scales):
         scores, boxes, boxes2, masks, data_dict = im_detect(predictor, data_batch, DATA_NAMES, scales)
         im_shapes = [data_batch.data[i][0].shape[2:4] for i in xrange(len(data_batch.data))]
 
-        print boxes[0].shape
         # mask output
         if not config.TEST.USE_MASK_MERGE:
             all_boxes = [[] for _ in xrange(config.NUM_CLASSES)]
@@ -111,7 +110,6 @@ def demo_net(predictor, data, image_names, im_scales):
                     cls_boxes = boxes[0][indexes, j * 4:(j + 1) * 4]
 
                 cls_dets = np.hstack((cls_boxes, cls_scores))
-                print cls_dets
                 keep = nms(cls_dets)
                 all_boxes[j] = cls_dets[keep, :]
                 all_masks[j] = cls_masks[keep, :]
@@ -140,19 +138,27 @@ def demo_net(predictor, data, image_names, im_scales):
         im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
         show_masks(im, dets, masks, CLASSES)
 
+        # debug
+        '''
+        for ii in range(scores[0].shape[0]):
+            for jj in range(1, scores[0].shape[1]):
+                if scores[0][ii][jj]>0.7:
+                    print ii, jj, scores[0][ii][jj]
+        '''
         # bounding box output
         all_boxes = [[] for _ in CLASSES]
         nms = py_nms_wrapper(NMS_THRESH)
         for cls in CLASSES:
-            cls_ind = CLASSES.index(cls)
+            cls_ind = CLASSES.index(cls)+1
             cls_boxes = boxes2[0][:, 4 * cls_ind:4 * (cls_ind + 1)]
             cls_scores = scores[0][:, cls_ind, np.newaxis]
             keep = np.where(cls_scores >= CONF_THRESH)[0]
+            #print cls, keep
             dets = np.hstack((cls_boxes, cls_scores)).astype(np.float32)[keep, :]
             keep = nms(dets)
-            all_boxes[cls_ind] = dets[keep, :]
+            all_boxes[cls_ind-1] = dets[keep, :]
 
-        boxes_this_image = [[]] + [all_boxes[j] for j in range(len(CLASSES))]
+        boxes_this_image = [all_boxes[j] for j in range(len(CLASSES))]
         vis_all_detection(data_dict[0]['data'].asnumpy(), boxes_this_image, CLASSES, im_scales[idx])
 
     print 'done'
