@@ -1,5 +1,5 @@
 /*!
- * Copyright (c) 2015 by Contributors
+ * Copyright (c) 2017 by Contributors
  * \file roi_align-inl.h
  * \brief roi align operator
  * \author Xilai Li

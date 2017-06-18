@@ -1,8 +1,8 @@
 /*!
- * Copyright (c) 2015 by Contributors
+ * Copyright (c) 2017 by Contributors
  * \file roi_align.cu
  * \brief roi align operator
- * \author Ross Girshick, Kye-Hyeon Kim, Jian Guo
+ * \author Xilai
 */
 #include "./roi_align-inl.h"
 #include <mshadow/tensor.h>
@@ -44,9 +44,11 @@ __global__ void ROIAlignForwardKernel(const int count, const Dtype* bottom_data,
     float roi_end_h = bottom_rois[4] * spatial_scale;
 
     // Force malformed ROIs to be 1x1
-    float roi_width = fmaxf(roi_end_w - roi_start_w + 1, 0);
-    float roi_height = fmaxf(roi_end_h - roi_start_h + 1, 0);
-    float bin_size_h = roi_height / (pooled_height - 1);   // needs to -1 ????
+    float roi_width = fmaxf(roi_end_w - roi_start_w, 0);
+    //float roi_width = fmaxf(roi_end_w - roi_start_w + 1, 0);
+    float roi_height = fmaxf(roi_end_h - roi_start_h, 0);
+    //float roi_height = fmaxf(roi_end_h - roi_start_h + 1, 0);
+    float bin_size_h = roi_height / (pooled_height - 1);
     float bin_size_w = roi_width / (pooled_width - 1);
 
     float h_ = float(ph) * bin_size_h + roi_start_h;
@@ -130,9 +132,11 @@ __global__ void ROIAlignBackwardAccKernel(const int count, const Dtype* top_diff
     float roi_end_h = bottom_rois[4] * spatial_scale;
 
     // Force malformed ROIs to be 1x1
-    float roi_width = fmaxf(roi_end_w - roi_start_w + 1, 0);
-    float roi_height = fmaxf(roi_end_h - roi_start_h + 1, 0);
-    float bin_size_h = roi_height / (pooled_height - 1);   // needs to -1 ????
+    float roi_width = fmaxf(roi_end_w - roi_start_w, 0);
+    //float roi_width = fmaxf(roi_end_w - roi_start_w + 1, 0);
+    float roi_height = fmaxf(roi_end_h - roi_start_h, 0);
+    //float roi_height = fmaxf(roi_end_h - roi_start_h + 1, 0);
+    float bin_size_h = roi_height / (pooled_height - 1);
     float bin_size_w = roi_width / (pooled_width - 1);
 
     float h_ = float(ph) * bin_size_h + roi_start_h;
@@ -155,71 +159,6 @@ __global__ void ROIAlignBackwardAccKernel(const int count, const Dtype* top_diff
       atomicAdd(bottom_diff + downright, top_diff[index]*h_ratio*w_ratio);
     }
 
-/*
-    // (n, c, h, w) coords in bottom data
-    int w = index % width;
-    int h = (index / width) % height;
-    int c = (index / width / height) % channels;
-    int n = index / width / height / channels;
-
-    Dtype gradient = 0;
-    // Accumulate gradient over all ROIs that pooled this element
-    for (int roi_n = 0; roi_n < num_rois; ++roi_n) {
-      const Dtype* offset_bottom_rois = bottom_rois + roi_n * 5;
-      int roi_batch_ind = offset_bottom_rois[0];
-      // Skip if ROI's batch index doesn't match n
-      if (n != roi_batch_ind) {
-        continue;
-      }
-
-      int roi_start_w = round(offset_bottom_rois[1] * spatial_scale);
-      int roi_start_h = round(offset_bottom_rois[2] * spatial_scale);
-      int roi_end_w = round(offset_bottom_rois[3] * spatial_scale);
-      int roi_end_h = round(offset_bottom_rois[4] * spatial_scale);
-
-      // Skip if ROI doesn't include (h, w)
-      const bool in_roi = (w >= roi_start_w && w <= roi_end_w &&
-                           h >= roi_start_h && h <= roi_end_h);
-      if (!in_roi) {
-        continue;
-      }
-
-      int offset = (roi_n * channels + c) * pooled_height * pooled_width;
-      const Dtype* offset_top_diff = top_diff + offset;
-      const Dtype* offset_argmax_data = argmax_data + offset;
-
-      // Compute feasible set of pooled units that could have pooled
-      // this bottom unit
-
-      // Force malformed ROIs to be 1x1
-      int roi_width = max(roi_end_w - roi_start_w + 1, 1);
-      int roi_height = max(roi_end_h - roi_start_h + 1, 1);
-
-      Dtype bin_size_h = static_cast<Dtype>(roi_height)
-                         / static_cast<Dtype>(pooled_height);
-      Dtype bin_size_w = static_cast<Dtype>(roi_width)
-                         / static_cast<Dtype>(pooled_width);
-
-      int phstart = floor(static_cast<Dtype>(h - roi_start_h) / bin_size_h);
-      int phend = ceil(static_cast<Dtype>(h - roi_start_h + 1) / bin_size_h);
-      int pwstart = floor(static_cast<Dtype>(w - roi_start_w) / bin_size_w);
-      int pwend = ceil(static_cast<Dtype>(w - roi_start_w + 1) / bin_size_w);
-
-      phstart = min(max(phstart, 0), pooled_height);
-      phend = min(max(phend, 0), pooled_height);
-      pwstart = min(max(pwstart, 0), pooled_width);
-      pwend = min(max(pwend, 0), pooled_width);
-
-      for (int ph = phstart; ph < phend; ++ph) {
-        for (int pw = pwstart; pw < pwend; ++pw) {
-          if (static_cast<int>(offset_argmax_data[ph * pooled_width + pw]) == (h * width + w)) {
-            gradient += offset_top_diff[ph * pooled_width + pw];
-          }
-        }
-      }
-    }
-    bottom_diff[index] += gradient;
-*/
   }
 }
 
