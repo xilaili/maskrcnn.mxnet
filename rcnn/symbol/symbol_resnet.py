@@ -130,7 +130,7 @@ def get_resnet_train(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCH
     mask_reg_targets = group[4]
 
     # Fast R-CNN
-    roi_pool = mx.symbol.ROIPooling(
+    roi_pool = mx.symbol.ROIAlign(
         name='roi_pool5', data=conv_feat, rois=rois, pooled_size=(14, 14), spatial_scale=1.0 / config.RCNN_FEAT_STRIDE)
 
     # res5
@@ -205,7 +205,7 @@ def get_resnet_test(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCHO
             threshold=config.TEST.RPN_NMS_THRESH, rpn_min_size=config.TEST.RPN_MIN_SIZE)
 
     # Fast R-CNN
-    roi_pool = mx.symbol.ROIPooling(
+    roi_pool = mx.symbol.ROIAlign(
         name='roi_pool5', data=conv_feat, rois=rois, pooled_size=(14, 14), spatial_scale=1.0 / config.RCNN_FEAT_STRIDE)
 
     # res5
