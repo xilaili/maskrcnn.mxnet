@@ -38,51 +38,38 @@ __global__ void ROIAlignForwardKernel(const int count, const Dtype* bottom_data,
       continue;
     }
 
-    int roi_start_w = round(bottom_rois[1] * spatial_scale);
-    int roi_start_h = round(bottom_rois[2] * spatial_scale);
-    int roi_end_w = round(bottom_rois[3] * spatial_scale);
-    int roi_end_h = round(bottom_rois[4] * spatial_scale);
+    float roi_start_w = bottom_rois[1] * spatial_scale;
+    float roi_start_h = bottom_rois[2] * spatial_scale;
+    float roi_end_w = bottom_rois[3] * spatial_scale;
+    float roi_end_h = bottom_rois[4] * spatial_scale;
 
     // Force malformed ROIs to be 1x1
-    int roi_width = max(roi_end_w - roi_start_w + 1, 1);
-    int roi_height = max(roi_end_h - roi_start_h + 1, 1);
-    Dtype bin_size_h = static_cast<Dtype>(roi_height)
-                       / static_cast<Dtype>(pooled_height);
-    Dtype bin_size_w = static_cast<Dtype>(roi_width)
-                       / static_cast<Dtype>(pooled_width);
+    int roi_width = fmaxf(roi_end_w - roi_start_w + 1, 0);
+    int roi_height = fmaxf(roi_end_h - roi_start_h + 1, 0);
+    float bin_size_h = roi_height / (pooled_height - 1);   // needs to -1 ????
+    float bin_size_w = roi_width / (pooled_width - 1);
 
-    int hstart = static_cast<int>(floor(static_cast<Dtype>(ph)
-                                        * bin_size_h));
-    int wstart = static_cast<int>(floor(static_cast<Dtype>(pw)
-                                        * bin_size_w));
-    int hend = static_cast<int>(ceil(static_cast<Dtype>(ph + 1)
-                                     * bin_size_h));
-    int wend = static_cast<int>(ceil(static_cast<Dtype>(pw + 1)
-                                     * bin_size_w));
+    float h_ = float(ph) * bin_size_h + roi_start_h;
+    float w_ = float(pw) * bin_size_w + roi_start_w;
+    int hstart = fminf(floor(h_), height-2);
+    int wstart = fminf(floor(w_), width-2);
 
-    // Add roi offsets and clip to input boundaries
-    hstart = min(max(hstart + roi_start_h, 0), height);
-    hend = min(max(hend + roi_start_h, 0), height);
-    wstart = min(max(wstart + roi_start_w, 0), width);
-    wend = min(max(wend + roi_start_w, 0), width);
-    bool is_empty = (hend <= hstart) || (wend <= wstart);
+    if (h_<0 || h_>=height || w_<0 || w_>=width) {
+      top_data[index] = 0;
+    } else {
+      bottom_data += (roi_batch_ind * channels + c) * height * width;
+      float  h_ratio = h_ - (float)(hstart);
+      float  w_ratio = w_ - (float)(wstart);
+      int upleft = hstart * width + wstart;
+      int upright = upleft + 1;
+      int downleft = upleft + width;
+      int downright = downleft + 1;
 
-    // Define an empty pooling region to be zero
-    Dtype maxval = is_empty ? 0 : -FLT_MAX;
-    // If nothing is pooled, argmax = -1 causes nothing to be backprop'd
-    int maxidx = -1;
-    bottom_data += (roi_batch_ind * channels + c) * height * width;
-    for (int h = hstart; h < hend; ++h) {
-      for (int w = wstart; w < wend; ++w) {
-        int bottom_index = h * width + w;
-        if (bottom_data[bottom_index] > maxval) {
-          maxval = bottom_data[bottom_index];
-          maxidx = bottom_index;
-        }
-      }
+      top_data[index] = bottom_data[upleft]*(1.-h_ratio)*(1.-w_ratio)
+                           + bottom_data[upright]*(1.-h_ratio)*w_ratio
+                           + bottom_data[downleft]*h_ratio*(1.-w_ratio)
+                           + bottom_data[downright]*h_ratio*w_ratio;
     }
-    top_data[index] = maxval;
-    argmax_data[index] = (Dtype)maxidx;
   }
 }
 
@@ -122,6 +109,53 @@ __global__ void ROIAlignBackwardAccKernel(const int count, const Dtype* top_diff
   for (int index = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
        index < count;
        index += blockDim.x * gridDim.x * gridDim.y) {
+
+    // (n, c, ph, pw) is an element in the pooled output
+    int pw = index % pooled_width;
+    int ph = (index / pooled_width) % pooled_height;
+    int c = (index / pooled_width / pooled_height) % channels;
+    int n = index / pooled_width / pooled_height / channels;
+
+    bottom_rois += n * 5;
+    int roi_batch_ind = bottom_rois[0];
+
+    if (roi_batch_ind < 0) {
+      bottom_diff[index] = 0;
+      continue;
+    }
+
+    float roi_start_w = bottom_rois[1] * spatial_scale;
+    float roi_start_h = bottom_rois[2] * spatial_scale;
+    float roi_end_w = bottom_rois[3] * spatial_scale;
+    float roi_end_h = bottom_rois[4] * spatial_scale;
+
+    // Force malformed ROIs to be 1x1
+    float roi_width = fmaxf(roi_end_w - roi_start_w + 1, 0);
+    float roi_height = fmaxf(roi_end_h - roi_start_h + 1, 0);
+    float bin_size_h = roi_height / (pooled_height - 1);   // needs to -1 ????
+    float bin_size_w = roi_width / (pooled_width - 1);
+
+    float h_ = float(ph) * bin_size_h + roi_start_h;
+    float w_ = float(pw) * bin_size_w + roi_start_w;
+    int hstart = fminf(floor(h_), height-2);
+    int wstart = fminf(floor(w_), width-2);
+
+    if (h_>=0 && h_<height && w_>=0 && w_<width) {
+      bottom_diff += (roi_batch_ind * channels + c) * height * width;
+      float  h_ratio = h_ - (float)(hstart);
+      float  w_ratio = w_ - (float)(wstart);
+      int upleft = hstart * width + wstart;
+      int upright = upleft + 1;
+      int downleft = upleft + width;
+      int downright = downleft + 1;
+
+      atomicAdd(bottom_diff + upleft, top_diff[index]*(1.-h_ratio)*(1.-w_ratio));
+      atomicAdd(bottom_diff + upright, top_diff[index]*(1.-h_ratio)*w_ratio);
+      atomicAdd(bottom_diff + downleft, top_diff[index]*h_ratio*(1.-w_ratio));
+      atomicAdd(bottom_diff + downright, top_diff[index]*h_ratio*w_ratio);
+    }
+
+/*
     // (n, c, h, w) coords in bottom data
     int w = index % width;
     int h = (index / width) % height;
@@ -185,6 +219,7 @@ __global__ void ROIAlignBackwardAccKernel(const int count, const Dtype* top_diff
       }
     }
     bottom_diff[index] += gradient;
+*/
   }
 }
 

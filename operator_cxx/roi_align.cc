@@ -39,21 +39,24 @@ inline void ROIAlignForward(const Tensor<cpu, 4, Dtype> &out,
   // For each ROI R = [batch_index x1 y1 x2 y2]: max pool over R
   for (int n = 0; n < num_rois; ++n) {
     int roi_batch_ind = bottom_rois[0];
-    int roi_start_w = round(bottom_rois[1] * spatial_scale_);
-    int roi_start_h = round(bottom_rois[2] * spatial_scale_);
-    int roi_end_w = round(bottom_rois[3] * spatial_scale_);
-    int roi_end_h = round(bottom_rois[4] * spatial_scale_);
+    float roi_start_w = bottom_rois[1] * spatial_scale_;
+    float roi_start_h = bottom_rois[2] * spatial_scale_;
+    float roi_end_w = bottom_rois[3] * spatial_scale_;
+    float roi_end_h = bottom_rois[4] * spatial_scale_;
     assert(roi_batch_ind >= 0);
     assert(roi_batch_ind < batch_size);
 
     // force malformed ROIs to be 1 * 1
-    int roi_height = max(roi_end_h - roi_start_h + 1, 1);
-    int roi_width = max(roi_end_w - roi_start_w + 1, 1);
+    float roi_height = fmaxf(roi_end_h - roi_start_h + 1, 0);
+    float roi_width = fmaxf(roi_end_w - roi_start_w + 1, 0);
+    float bin_size_h = roi_height / (pooled_height_ - 1);   // needs to -1 ????
+    float bin_size_w = roi_width / (pooled_width_ - 1);
+/*
     const Dtype bin_size_h = static_cast<Dtype>(roi_height)
                              / static_cast<Dtype>(pooled_height_);
     const Dtype bin_size_w = static_cast<Dtype>(roi_width)
                              / static_cast<Dtype>(pooled_width_);
-
+*/
     const Dtype* batch_data = bottom_data + data_size * roi_batch_ind;
 
     for (int c = 0; c < channels_; ++c) {
@@ -62,6 +65,7 @@ inline void ROIAlignForward(const Tensor<cpu, 4, Dtype> &out,
           // Compute pooling region for this output unit:
           //  start (included) = floor(ph * roi_height / pooled_height_)
           //  end (excluded) = ceil((ph + 1) * roi_height / pooled_height_)
+/*
           int hstart = static_cast<int>(floor(static_cast<Dtype>(ph)
                                               * bin_size_h));
           int wstart = static_cast<int>(floor(static_cast<Dtype>(pw)
@@ -70,12 +74,16 @@ inline void ROIAlignForward(const Tensor<cpu, 4, Dtype> &out,
                                            * bin_size_h));
           int wend = static_cast<int>(ceil(static_cast<Dtype>(pw + 1)
                                            * bin_size_w));
-
+*/
+          float h_ = float(ph) * bin_size_h + roi_start_h;
+          float w_ = float(pw) * bin_size_w + roi_start_w;
+          int hstart = fminf(floor(h_), height_-2);
+          int wstart = fminf(floor(w_), width_-2);
+/*
           hstart = min(max(hstart + roi_start_h, 0), height_);
           hend = min(max(hend + roi_start_h, 0), height_);
           wstart = min(max(wstart + roi_start_w, 0), width_);
           wend = min(max(wend + roi_start_w, 0), width_);
-
           bool is_empty = (hend <= hstart) || (wend <= wstart);
 
           const int pool_index = ph * pooled_width_ + pw;
@@ -92,6 +100,23 @@ inline void ROIAlignForward(const Tensor<cpu, 4, Dtype> &out,
                 argmax_data[pool_index] = index;
               }
             }
+          }
+*/
+          const int pool_index = ph * pooled_width_ + pw; 
+          if (h_<0 || h_>=height_ || w_<0 || w_>=width_) {
+              top_data[pool_index] = 0;
+          } else {
+              float  h_ratio = h_ - (float)(hstart);
+              float  w_ratio = w_ - (float)(wstart);
+              int upleft = hstart * width_ + wstart;
+              int upright = upleft + 1;
+              int downleft = upleft + width_;
+              int downright = downleft + 1;
+
+              top_data[pool_index] = batch_data[upleft]*(1.-h_ratio)*(1.-w_ratio)
+                                   + batch_data[upright]*(1.-h_ratio)*w_ratio
+                                   + batch_data[downleft]*h_ratio*(1.-w_ratio)
+                                   + batch_data[downright]*h_ratio*w_ratio;
           }
         }
       }
@@ -127,6 +152,62 @@ inline void ROIAlignBackwardAcc(const Tensor<cpu, 4, Dtype> &in_grad,
 
   const int num_rois = bbox.size(0);
 
+  const int data_size = in_grad.size(1) * in_grad.size(2) * in_grad.size(3);
+  // For each ROI R = [batch_index x1 y1 x2 y2]: max pool over R
+  for (int n = 0; n < num_rois; ++n) {
+    int roi_batch_ind = bottom_rois[0];
+    float roi_start_w = bottom_rois[1] * spatial_scale_;
+    float roi_start_h = bottom_rois[2] * spatial_scale_;
+    float roi_end_w = bottom_rois[3] * spatial_scale_;
+    float roi_end_h = bottom_rois[4] * spatial_scale_;
+    assert(roi_batch_ind >= 0);
+    assert(roi_batch_ind < batch_size);
+
+    // force malformed ROIs to be 1 * 1
+    float roi_height = fmaxf(roi_end_h - roi_start_h + 1, 0);
+    float roi_width = fmaxf(roi_end_w - roi_start_w + 1, 0);
+    float bin_size_h = roi_height / (pooled_height_ - 1);   // needs to -1 ????
+    float bin_size_w = roi_width / (pooled_width_ - 1);
+
+    Dtype* batch_data = bottom_diff + data_size * roi_batch_ind;
+
+    for (int c = 0; c < channels_; ++c) {
+      for (int ph = 0; ph < pooled_height_; ++ph) {
+        for (int pw = 0; pw < pooled_width_; ++pw) {
+          // Compute pooling region for this output unit:
+          //  start (included) = floor(ph * roi_height / pooled_height_)
+          //  end (excluded) = ceil((ph + 1) * roi_height / pooled_height_)
+          float h_ = float(ph) * bin_size_h + roi_start_h;
+          float w_ = float(pw) * bin_size_w + roi_start_w;
+          int hstart = fminf(floor(h_), height_-2);
+          int wstart = fminf(floor(w_), width_-2);
+
+          const int pool_index = ph * pooled_width_ + pw; 
+          if (h_>=0 && h_<height_ && w_>=0 && w_<width_) {
+              float h_ratio = h_ - (float)(hstart);
+              float w_ratio = w_ - (float)(wstart);
+              int upleft = hstart * width_ + wstart;
+              int upright = upleft + 1;
+              int downleft = upleft + width_;
+              int downright = downleft + 1;
+
+              batch_data[upleft] += top_diff[pool_index]*(1.-h_ratio)*(1.-w_ratio);
+              batch_data[upright] += top_diff[pool_index]*(1.-h_ratio)*w_ratio;
+              batch_data[downleft] += top_diff[pool_index]*h_ratio*(1.-w_ratio);
+              batch_data[downright] += top_diff[pool_index]*h_ratio*w_ratio;
+          }
+        }
+      }
+      // Increment all data pointers by one channel
+      batch_data += in_grad.size(2) * in_grad.size(3);
+      top_diff += out_grad.size(2) * out_grad.size(3);
+      argmax_data += max_idx.size(2) * max_idx.size(3);
+    }
+    // Increment ROI data pointer
+    bottom_rois += bbox.size(1);
+  }
+
+/*
   for (int b = 0; b < batch_size_; ++b) {
     for (int c = 0; c < channels_; ++c) {
       for (int h = 0; h < height_; ++h) {
@@ -198,7 +279,7 @@ inline void ROIAlignBackwardAcc(const Tensor<cpu, 4, Dtype> &in_grad,
       }
     }
   }
-
+*/
   return;
 }
 }  // namespace mshadow
