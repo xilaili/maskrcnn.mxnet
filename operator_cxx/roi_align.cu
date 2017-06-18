@@ -44,8 +44,8 @@ __global__ void ROIAlignForwardKernel(const int count, const Dtype* bottom_data,
     float roi_end_h = bottom_rois[4] * spatial_scale;
 
     // Force malformed ROIs to be 1x1
-    int roi_width = fmaxf(roi_end_w - roi_start_w + 1, 0);
-    int roi_height = fmaxf(roi_end_h - roi_start_h + 1, 0);
+    float roi_width = fmaxf(roi_end_w - roi_start_w + 1, 0);
+    float roi_height = fmaxf(roi_end_h - roi_start_h + 1, 0);
     float bin_size_h = roi_height / (pooled_height - 1);   // needs to -1 ????
     float bin_size_w = roi_width / (pooled_width - 1);
 
