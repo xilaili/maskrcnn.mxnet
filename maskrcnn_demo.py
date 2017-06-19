@@ -46,7 +46,7 @@ def load_data():
     im_scales = []
     for im_name in image_names:
         assert os.path.exists('../data/demo/' + im_name), ('%s does not exist'.format('../data/demo/' + im_name))
-        im = cv2.imread('../data/demo/' + im_name, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
+        im = cv2.imread('../data/demo/' + im_name, cv2.IMREAD_COLOR) # | cv2.IMREAD_IGNORE_ORIENTATION)
         target_size = config.SCALES[0][0]
         max_size = config.SCALES[0][1]
         im, im_scale = resize(im, target_size, max_size, stride=config.IMAGE_STRIDE)
