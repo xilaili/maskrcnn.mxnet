@@ -28,13 +28,14 @@ class TestLoader(mx.io.DataIter):
         if has_rpn:
             self.data_name = ['data', 'im_info']
         else:
-            self.data_name = ['data', 'rois']
+            raise NotImplementedError
+            #self.data_name = ['data', 'rois']
         self.label_name = None
 
         # status variable for synchronization between get_data and get_label
         self.cur = 0
         self.data = None
-        self.label = None
+        self.label = []
         self.im_info = None
 
         # get first batch to fill in provide_data and provide_label
@@ -43,10 +44,18 @@ class TestLoader(mx.io.DataIter):
 
     @property
     def provide_data(self):
-        return [(k, v.shape) for k, v in zip(self.data_name, self.data)]
+        return [[(k, v.shape) for k, v in zip(self.data_name, self.data[i])] for i in xrange(len(self.data))]
 
     @property
     def provide_label(self):
+        return [None for i in xrange(len(self.data))]
+
+    @property
+    def provide_data_single(self):
+        return [(k, v.shape) for k, v in zip(self.data_name, self.data[0])]
+
+    @property
+    def provide_label_single(self):
         return None
 
     def reset(self):
@@ -84,8 +93,8 @@ class TestLoader(mx.io.DataIter):
         if self.has_rpn:
             data, label, im_info = get_rpn_testbatch(roidb)
         else:
-            data, label, im_info = get_rcnn_testbatch(roidb)
-        self.data = [mx.nd.array(data[name]) for name in self.data_name]
+            raise NotImplementedError
+        self.data = [[mx.nd.array(data[i][name]) for name in self.data_name] for i in xrange(len(data))]
         self.im_info = im_info
 
 

@@ -6,7 +6,7 @@ from rcnn.tools.test_rcnn import test_rcnn
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Test a Faster R-CNN network')
+    parser = argparse.ArgumentParser(description='Test a Mask R-CNN network')
     # general
     parser.add_argument('--network', help='network name', default=default.network, type=str)
     parser.add_argument('--dataset', help='dataset name', default=default.dataset, type=str)

@@ -18,6 +18,47 @@ from ..utils.tictoc import tic, toc
 from ..utils.mask_coco2voc import mask_coco2voc
 from ..utils.mask_voc2coco import mask_voc2coco
 
+def coco_results_one_category_kernel(data_pack):
+    cat_id = data_pack['cat_id']
+    ann_type = data_pack['ann_type']
+    binary_thresh = data_pack['binary_thresh']
+    all_im_info = data_pack['all_im_info']
+    boxes = data_pack['boxes']
+    if ann_type == 'bbox':
+        masks = []
+    elif ann_type == 'segm':
+        masks = data_pack['masks']
+    else:
+        print 'unimplemented ann_type: ' + ann_type
+    cat_results = []
+    for im_ind, im_info in enumerate(all_im_info):
+        index = im_info['index']
+        dets = boxes[im_ind].astype(np.float)
+        if len(dets) == 0:
+            continue
+        scores = dets[:, -1]
+        if ann_type == 'bbox':
+            xs = dets[:, 0]
+            ys = dets[:, 1]
+            ws = dets[:, 2] - xs + 1
+            hs = dets[:, 3] - ys + 1
+            result = [{'image_id': index,
+                       'category_id': cat_id,
+                       'bbox': [xs[k], ys[k], ws[k], hs[k]],
+                       'score': scores[k]} for k in xrange(dets.shape[0])]
+        elif ann_type == 'segm':
+            width = im_info['width']
+            height = im_info['height']
+            dets[:, :4] = clip_boxes(dets[:, :4], [height, width])
+            mask_encode = mask_voc2coco(masks[im_ind], dets[:, :4], height, width, binary_thresh)
+            result = [{'image_id': index,
+                       'category_id': cat_id,
+                       'segmentation': mask_encode[k],
+                       'score': scores[k]} for k in xrange(len(mask_encode))]
+        cat_results.extend(result)
+    return cat_results
+
+
 def generate_cache_seg_inst_kernel(annWithObjs):
     """
     generate cache_seg_inst
@@ -66,6 +107,8 @@ class coco(IMDB):
         self.image_set_index = self._load_image_set_index()
         self.num_images = len(self.image_set_index)
         logger.info('%s num_images %d' % (self.name, self.num_images))
+        self.mask_size = mask_size
+        self.binary_thresh = binary_thresh
 
         # deal with data name
         view_map = {'minival2014': 'val2014',
@@ -119,7 +162,7 @@ class coco(IMDB):
         """
         # for internal useage
         tic();
-        gt_sdsdb_temp = [self.load_coco_sds_annotation(index) for index in self.image_set_index[:10000]]
+        gt_sdsdb_temp = [self.load_coco_sds_annotation(index) for index in self.image_set_index[:200]]
         gt_sdsdb = [x[0] for x in gt_sdsdb_temp]
         print 'prepare gt_sdsdb using', toc(), 'seconds';
         #objs = [x[1] for x in gt_sdsdb_temp]
@@ -272,31 +315,62 @@ class coco(IMDB):
         return sds_rec, objs
 
 
-    def evaluate_detections(self, detections):
+    def evaluate_detections(self, detections, ann_type):
         """ detections_val2014_results.json """
         res_folder = os.path.join(self.result_path, 'results')
         if not os.path.exists(res_folder):
             os.makedirs(res_folder)
         res_file = os.path.join(res_folder, 'detections_%s_results.json' % self.image_set)
-        self._write_coco_results(detections, res_file)
+        self._write_coco_results(detections, res_file, ann_type)
         if 'test' not in self.image_set:
-            self._do_python_eval(res_file, res_folder)
+            info_str = self._do_python_eval(res_file, res_folder, ann_type)
+            return info_str
 
-    def _write_coco_results(self, detections, res_file):
+    def evaluate_sds(self, all_boxes, all_masks):
+        info_str = self.evaluate_detections([all_boxes, all_masks], 'segm')
+        return info_str
+
+    def _write_coco_results(self, detections, res_file, ann_type):
         """ example results
         [{"image_id": 42,
           "category_id": 18,
           "bbox": [258.15,41.29,348.26,243.78],
           "score": 0.236}, ...]
         """
-        results = []
-        for cls_ind, cls in enumerate(self.classes):
-            if cls == '__background__':
-                continue
-            logger.info('collecting %s results (%d/%d)' % (cls, cls_ind, self.num_classes - 1))
-            coco_cat_id = self._class_to_coco_ind[cls]
-            results.extend(self._coco_results_one_category(detections[cls_ind], coco_cat_id))
-        logger.info('writing results json to %s' % res_file)
+        all_im_info = [{'index': index,
+                        'height': self.coco.loadImgs(index)[0]['height'],
+                        'width': self.coco.loadImgs(index)[0]['width']}
+                        for index in self.image_set_index]
+
+        if ann_type == 'bbox':
+            data_pack = [{'cat_id': self._class_to_coco_ind[cls],
+                          'cls_ind': cls_ind,
+                          'cls': cls,
+                          'ann_type': ann_type,
+                          'binary_thresh': self.binary_thresh,
+                          'all_im_info': all_im_info,
+                          'boxes': detections[0][cls_ind]}
+                         for cls_ind, cls in enumerate(self.classes) if not cls == '__background__']
+        elif ann_type == 'segm':
+            data_pack = [{'cat_id': self._class_to_coco_ind[cls],
+                          'cls_ind': cls_ind,
+                          'cls': cls,
+                          'ann_type': ann_type,
+                          'binary_thresh': self.binary_thresh,
+                          'all_im_info': all_im_info,
+                          'boxes': detections[0][cls_ind],
+                          'masks': detections[1][cls_ind]}
+                         for cls_ind, cls in enumerate(self.classes) if not cls == '__background__']
+        else:
+            print 'unimplemented ann_type: '+ann_type
+        # results = coco_results_one_category_kernel(data_pack[1])
+        # print results[0]
+        pool = mp.Pool(mp.cpu_count())
+        results = pool.map(coco_results_one_category_kernel, data_pack)
+        pool.close()
+        pool.join()
+        results = sum(results, [])
+        print 'Writing results json to %s' % res_file
         with open(res_file, 'w') as f:
             json.dump(results, f, sort_keys=True, indent=4)
 
@@ -318,19 +392,20 @@ class coco(IMDB):
             results.extend(result)
         return results
 
-    def _do_python_eval(self, res_file, res_folder):
-        ann_type = 'bbox'
+    def _do_python_eval(self, res_file, res_folder, ann_type):
         coco_dt = self.coco.loadRes(res_file)
         coco_eval = COCOeval(self.coco, coco_dt)
         coco_eval.params.useSegm = (ann_type == 'segm')
         coco_eval.evaluate()
         coco_eval.accumulate()
-        self._print_detection_metrics(coco_eval)
+        info_str = self._print_detection_metrics(coco_eval)
 
         eval_file = os.path.join(res_folder, 'detections_%s_results.pkl' % self.image_set)
-        with open(eval_file, 'wb') as f:
+        with open(eval_file, 'w') as f:
             cPickle.dump(coco_eval, f, cPickle.HIGHEST_PROTOCOL)
-        logger.info('eval results saved to %s' % eval_file)
+        print 'coco eval results saved to %s' % eval_file
+        info_str += 'coco eval results saved to %s\n' % eval_file
+        return info_str
 
     def _print_detection_metrics(self, coco_eval):
         IoU_lo_thresh = 0.5

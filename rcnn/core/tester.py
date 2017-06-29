@@ -148,7 +148,9 @@ def im_detect(predictor, data_batch, data_names, scales):
     return scores_all, rois_all, pred_boxes_all, pred_masks_all, data_dict_all
 
 
-def pred_eval(predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, logger=None, ignore_cache=False):
+def pred_eval(predictor, test_data, imdb, vis=False, thresh=1e-3, logger=None, ignore_cache=False):
+
+    print test_data.data
 
     det_file = os.path.join(imdb.result_path, imdb.name + '_detections.pkl')
     seg_file = os.path.join(imdb.result_path, imdb.name + '_masks.pkl')
@@ -161,15 +163,16 @@ def pred_eval(predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, logger=No
     else:
         assert vis or not test_data.shuffle
         data_names = [k[0] for k in test_data.provide_data[0]]
+        print data_names
 
         if not isinstance(test_data, PrefetchingIter):
             test_data = PrefetchingIter(test_data)
 
         # function pointers
-        nms = py_nms_wrapper(cfg.TEST.NMS)
-        mask_voting = gpu_mask_voting if cfg.TEST.USE_GPU_MASK_MERGE else cpu_mask_voting
+        nms = py_nms_wrapper(config.TEST.NMS)
+        mask_voting = gpu_mask_voting if config.TEST.USE_GPU_MASK_MERGE else cpu_mask_voting
 
-        max_per_image = 100 if cfg.TEST.USE_MASK_MERGE else -1
+        max_per_image = 100 if config.TEST.USE_MASK_MERGE else -1
         num_images = imdb.num_images
         all_boxes = [[[] for _ in xrange(num_images)]
                      for _ in xrange(imdb.num_classes)]
@@ -179,11 +182,13 @@ def pred_eval(predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, logger=No
         idx = 0
         t = time.time()
         for data_batch in test_data:
+            data_batch = data_batch[1]
+            print data_batch.data
             t1 = time.time() - t
             t = time.time()
 
             scales = [data_batch.data[i][1].asnumpy()[0, 2] for i in xrange(len(data_batch.data))]
-            scores_all, boxes_all, masks_all, data_dict_all = im_detect(predictor, data_batch, data_names, scales, cfg)
+            scores_all, _, boxes_all, masks_all, data_dict_all = im_detect(predictor, data_batch, data_names, scales)
             im_shapes = [data_batch.data[i][0].shape[2:4] for i in xrange(len(data_batch.data))]
 
             t2 = time.time() - t
@@ -192,13 +197,13 @@ def pred_eval(predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, logger=No
             # post processing
             for delta, (scores, boxes, masks, data_dict) in enumerate(zip(scores_all, boxes_all, masks_all, data_dict_all)):
 
-                if not cfg.TEST.USE_MASK_MERGE:
+                if not config.TEST.USE_MASK_MERGE:
                     for j in range(1, imdb.num_classes):
                         indexes = np.where(scores[:, j] > thresh)[0]
                         cls_scores = scores[indexes, j, np.newaxis]
                         cls_masks = masks[indexes, 1, :, :]
                         try:
-                            if cfg.CLASS_AGNOSTIC:
+                            if config.CLASS_AGNOSTIC:
                                 cls_boxes = boxes[indexes, :]
                             else:
                                 raise Exception()
@@ -216,8 +221,8 @@ def pred_eval(predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, logger=No
                     boxes = clip_boxes(boxes, (im_height, im_width))
                     result_mask, result_box = mask_voting(masks, boxes, scores, imdb.num_classes,
                                                           max_per_image, im_width, im_height,
-                                                          cfg.TEST.NMS, cfg.TEST.MASK_MERGE_THRESH,
-                                                          cfg.BINARY_THRESH)
+                                                          config.TEST.NMS, config.TEST.MASK_MERGE_THRESH,
+                                                          config.BINARY_THRESH)
                     for j in xrange(1, imdb.num_classes):
                         all_boxes[j][idx+delta] = result_box[j]
                         all_masks[j][idx+delta] = result_mask[j][:,0,:,:]
@@ -225,7 +230,7 @@ def pred_eval(predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, logger=No
                 if vis:
                     boxes_this_image = [[]] + [all_boxes[j][idx + delta] for j in range(1, imdb.num_classes)]
                     masks_this_image = [[]] + [all_masks[j][idx + delta] for j in range(1, imdb.num_classes)]
-                    vis_all_mask(data_dict['data'].asnumpy(), boxes_this_image, masks_this_image, imdb.classes, scales[delta], cfg)
+                    vis_all_mask(data_dict['data'].asnumpy(), boxes_this_image, masks_this_image, imdb.classes, scales[delta])
 
             idx += test_data.batch_size
             t3 = time.time() - t
@@ -245,7 +250,7 @@ def pred_eval(predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, logger=No
         logger.info('evaluate detections: \n{}'.format(info_str))
 
         
-def vis_all_mask(im_array, detections, masks, class_names, scale, cfg):
+def vis_all_mask(im_array, detections, masks, class_names, scale):
     """
     visualize all detections in one image
     :param im_array: [b=1 c h w] in rgb
@@ -258,7 +263,7 @@ def vis_all_mask(im_array, detections, masks, class_names, scale, cfg):
     import random
     import cv2
     import os
-    im = image.transform_inverse(im_array, cfg.network.PIXEL_MEANS)
+    im = image.transform_inverse(im_array, config.PIXEL_MEANS)
     plt.cla()
     plt.axis('off')
     plt.imshow(im)
@@ -279,7 +284,7 @@ def vis_all_mask(im_array, detections, masks, class_names, scale, cfg):
             cod[3] = int(bbox[3])
             if im[cod[1]:cod[3], cod[0]:cod[2], 0].size > 0:
                 msk = cv2.resize(msk, im[cod[1]:cod[3], cod[0]:cod[2], 0].T.shape)
-                bimsk = msk > cfg.BINARY_THRESH
+                bimsk = msk > config.BINARY_THRESH
                 bimsk = bimsk.astype(int)
                 bimsk = np.repeat(bimsk[:, :, np.newaxis], 3, axis=2)
                 mskd = im[cod[1]:cod[3], cod[0]:cod[2], :] * bimsk
