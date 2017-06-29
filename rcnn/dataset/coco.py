@@ -18,6 +18,8 @@ from ..utils.tictoc import tic, toc
 from ..utils.mask_coco2voc import mask_coco2voc
 from ..utils.mask_voc2coco import mask_voc2coco
 
+from rcnn.processing.bbox_transform import clip_boxes
+
 def coco_results_one_category_kernel(data_pack):
     cat_id = data_pack['cat_id']
     ann_type = data_pack['ann_type']
@@ -33,7 +35,13 @@ def coco_results_one_category_kernel(data_pack):
     cat_results = []
     for im_ind, im_info in enumerate(all_im_info):
         index = im_info['index']
-        dets = boxes[im_ind].astype(np.float)
+        print "gdlgflds"
+        print boxes[im_ind]
+        try:
+            dets = boxes[im_ind].astype(np.float)
+        except:
+            dets = boxes[im_ind]
+        print "etueorje"
         if len(dets) == 0:
             continue
         scores = dets[:, -1]
@@ -408,6 +416,7 @@ class coco(IMDB):
         return info_str
 
     def _print_detection_metrics(self, coco_eval):
+        info_str = ''
         IoU_lo_thresh = 0.5
         IoU_hi_thresh = 0.95
 
@@ -428,7 +437,9 @@ class coco(IMDB):
             coco_eval.eval['precision'][ind_lo:(ind_hi + 1), :, :, 0, 2]
         ap_default = np.mean(precision[precision > -1])
         logger.info('~~~~ Mean and per-category AP @ IoU=%.2f,%.2f] ~~~~' % (IoU_lo_thresh, IoU_hi_thresh))
+        info_str += '~~~~ Mean and per-category AP @ IoU=%.2f,%.2f] ~~~~\n' % (IoU_lo_thresh, IoU_hi_thresh)
         logger.info('%-15s %5.1f' % ('all', 100 * ap_default))
+        info_str += '%-15s %5.1f\n' % ('all', 100 * ap_default)
         for cls_ind, cls in enumerate(self.classes):
             if cls == '__background__':
                 continue
@@ -436,6 +447,9 @@ class coco(IMDB):
             precision = coco_eval.eval['precision'][ind_lo:(ind_hi + 1), :, cls_ind - 1, 0, 2]
             ap = np.mean(precision[precision > -1])
             logger.info('%-15s %5.1f' % (cls, 100 * ap))
+            info_str +=  '%-15s %5.1f\n' % (cls, 100 * ap)
 
         logger.info('~~~~ Summary metrics ~~~~')
         coco_eval.summarize()
+
+        return info_str
