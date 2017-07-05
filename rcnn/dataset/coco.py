@@ -35,13 +35,10 @@ def coco_results_one_category_kernel(data_pack):
     cat_results = []
     for im_ind, im_info in enumerate(all_im_info):
         index = im_info['index']
-        print "gdlgflds"
-        print boxes[im_ind]
         try:
             dets = boxes[im_ind].astype(np.float)
         except:
             dets = boxes[im_ind]
-        print "etueorje"
         if len(dets) == 0:
             continue
         scores = dets[:, -1]
@@ -170,7 +167,7 @@ class coco(IMDB):
         """
         # for internal useage
         tic();
-        gt_sdsdb_temp = [self.load_coco_sds_annotation(index) for index in self.image_set_index[:200]]
+        gt_sdsdb_temp = [self.load_coco_sds_annotation(index) for index in self.image_set_index]
         gt_sdsdb = [x[0] for x in gt_sdsdb_temp]
         print 'prepare gt_sdsdb using', toc(), 'seconds';
         #objs = [x[1] for x in gt_sdsdb_temp]

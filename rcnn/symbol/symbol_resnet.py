@@ -130,9 +130,12 @@ def get_resnet_train(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCH
     mask_reg_targets = group[4]
 
     # Fast R-CNN
-    roi_pool = mx.symbol.ROIAlign(
-        name='roi_pool5', data=conv_feat, rois=rois, pooled_size=(14, 14), spatial_scale=1.0 / config.RCNN_FEAT_STRIDE)
-
+    if config.USE_ROI_ALIGN:
+        roi_pool = mx.symbol.ROIAlign(
+            name='roi_pool5', data=conv_feat, rois=rois, pooled_size=(14, 14), spatial_scale=1.0 / config.RCNN_FEAT_STRIDE)
+    else:
+        roi_pool = mx.symbol.ROIPooling(
+            name='roi_pool5', data=conv_feat, rois=rois, pooled_size=(14, 14), spatial_scale=1.0 / config.RCNN_FEAT_STRIDE)
     # res5
     unit = residual_unit(data=roi_pool, num_filter=filter_list[3], stride=(2, 2), dim_match=False, name='stage4_unit1')
     for i in range(2, units[3] + 1):
@@ -150,9 +153,9 @@ def get_resnet_train(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCH
     bbox_loss = mx.sym.MakeLoss(name='bbox_loss', data=bbox_loss_, grad_scale=1.0 / config.TRAIN.BATCH_ROIS)
     # mask prediction
     mask_pred1 = mx.symbol.Deconvolution(name='mask_pred1', data=relu1, kernel=(2,2), stride=(2,2), num_filter=256, workspace=1024)
-    #mask_relu1 = mx.sym.Activation(data=mask_pred1, act_type='relu', name='mask_relu1')
+    mask_relu1 = mx.sym.Activation(data=mask_pred1, act_type='relu', name='mask_relu1')
     # whether to add relu here?
-    mask_pred2 = mx.symbol.Convolution(name='mask_pred2', data=mask_pred1, kernel=(1,1), pad=(0,0), num_filter=2*num_classes)
+    mask_pred2 = mx.symbol.Convolution(name='mask_pred2', data=mask_relu1, kernel=(1,1), pad=(0,0), num_filter=2*num_classes)
     # write an operator to compute mask losses
     label_mask = mx.sym.Reshape(name='label_mask', data=label, shape=(-1, 1, 1, 1))
     mask_pred3 = mx.contrib.sym.ChannelOperator(name='mask_pred3', data=mask_pred2, pick_idx=label_mask, group=num_classes, op_type='Group_Pick', pick_type='Label_Pick')
@@ -206,9 +209,12 @@ def get_resnet_test(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCHO
             threshold=config.TEST.RPN_NMS_THRESH, rpn_min_size=config.TEST.RPN_MIN_SIZE)
 
     # Fast R-CNN
-    roi_pool = mx.symbol.ROIAlign(
-        name='roi_pool5', data=conv_feat, rois=rois, pooled_size=(14, 14), spatial_scale=1.0 / config.RCNN_FEAT_STRIDE)
-
+    if config.USE_ROI_ALIGN:
+        roi_pool = mx.symbol.ROIAlign(
+            name='roi_pool5', data=conv_feat, rois=rois, pooled_size=(14, 14), spatial_scale=1.0 / config.RCNN_FEAT_STRIDE)
+    else:
+        roi_pool = mx.symbol.ROIPooling(
+            name='roi_pool5', data=conv_feat, rois=rois, pooled_size=(14, 14), spatial_scale=1.0 / config.RCNN_FEAT_STRIDE)
     # res5
     unit = residual_unit(data=roi_pool, num_filter=filter_list[3], stride=(2, 2), dim_match=False, name='stage4_unit1')
     for i in range(2, units[3] + 1):
@@ -224,8 +230,8 @@ def get_resnet_test(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCHO
     bbox_pred = mx.symbol.FullyConnected(name='bbox_pred', data=pool1, num_hidden=num_classes * 4)
     # mask prediction
     mask_pred1 = mx.symbol.Deconvolution(name='mask_pred1', data=relu1, kernel=(2,2), stride=(2,2), num_filter=256, workspace=1024)
-    #mask_relu1 = mx.sym.Activation(data=mask_pred1, act_type='relu', name='mask_relu1')
-    mask_pred2 = mx.symbol.Convolution(name='mask_pred2', data=mask_pred1, kernel=(1,1), pad=(0,0), num_filter=2*num_classes)
+    mask_relu1 = mx.sym.Activation(data=mask_pred1, act_type='relu', name='mask_relu1')
+    mask_pred2 = mx.symbol.Convolution(name='mask_pred2', data=mask_relu1, kernel=(1,1), pad=(0,0), num_filter=2*num_classes)
     mask_score = mx.sym.Reshape(name='mask_score', data=cls_prob, shape=(-1, num_classes, 1, 1))
     mask_softmax = mx.contrib.sym.ChannelOperator(name='mask_softmax', data=mask_pred2, group=num_classes, op_type='Group_Softmax')
     mask_pred = mx.contrib.sym.ChannelOperator(name='mask_pred', data=mask_softmax, pick_idx=mask_score, group=num_classes, op_type='Group_Pick', pick_type='Score_Pick')
