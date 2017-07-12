@@ -86,3 +86,4 @@ target/
 mxnet/
 faster-rcnn
 faster-rcnn.pdf
+model/

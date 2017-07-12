@@ -140,6 +140,7 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch,
     base_lr = lr
     lr_factor = 0.1
     lr_epoch = [int(epoch) for epoch in lr_step.split(',')]
+    print lr_epoch
     lr_epoch_diff = [epoch - begin_epoch for epoch in lr_epoch if epoch > begin_epoch]
     lr = base_lr * (lr_factor ** (len(lr_epoch) - len(lr_epoch_diff)))
     lr_iters = [int(epoch * len(sdsdb) / batch_size) for epoch in lr_epoch_diff]

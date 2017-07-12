@@ -15,7 +15,7 @@ config.USE_ROI_ALIGN = False
 # dataset related params
 config.NUM_CLASSES = 81
 config.SCALES = [(600, 1000)]  # first is scale (the shorter side); second is max size
-config.ANCHOR_SCALES = (8, 16, 32, 64, 128)
+config.ANCHOR_SCALES = (16, 32, 64, 128, 256)
 config.ANCHOR_RATIOS = (0.5, 1, 2)
 config.NUM_ANCHORS = len(config.ANCHOR_SCALES) * len(config.ANCHOR_RATIOS)
 config.MASK_SIZE = 14
@@ -118,9 +118,9 @@ default.frequent = 20
 default.kvstore = 'device'
 # default e2e
 default.e2e_prefix = 'model/e2e'
-default.e2e_epoch = 10
+default.e2e_epoch = 25
 default.e2e_lr = default.base_lr
-default.e2e_lr_step = '7'
+default.e2e_lr_step = '12,18'
 # default rpn
 default.rpn_prefix = 'model/rpn'
 default.rpn_epoch = 8
