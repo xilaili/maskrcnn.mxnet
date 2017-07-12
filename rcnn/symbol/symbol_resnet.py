@@ -64,14 +64,14 @@ def get_resnet_train(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCH
     print 'Getting resnet training symbol'
     data = mx.symbol.Variable(name="data")
     im_info = mx.symbol.Variable(name="im_info")
-    gt_boxes = mx.symbol.Variable(name="gt_boxes")
-    gt_masks = mx.symbol.Variable(name="gt_masks")
+    gt_boxes = mx.symbol.Variable(name="gt_boxes")         # 1*num_inst*5
+    gt_masks = mx.symbol.Variable(name="gt_masks")         # num_inst*H*W
     rpn_label = mx.symbol.Variable(name='label')
     rpn_bbox_target = mx.symbol.Variable(name='bbox_target')
     rpn_bbox_weight = mx.symbol.Variable(name='bbox_weight')
 
     # shared convolutional layers
-    conv_feat = get_resnet_conv(data)
+    conv_feat = get_resnet_conv(data)     #1*1024*h*w
 
     # RPN layers
     rpn_conv = mx.symbol.Convolution(
@@ -100,7 +100,7 @@ def get_resnet_train(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCH
         data=rpn_cls_act, shape=(0, 2 * num_anchors, -1, 0), name='rpn_cls_act_reshape')
     if config.TRAIN.CXX_PROPOSAL:
         rois = mx.contrib.symbol.Proposal(
-            cls_prob=rpn_cls_act_reshape, bbox_pred=rpn_bbox_pred, im_info=im_info, name='rois',
+            cls_prob=rpn_cls_act_reshape, bbox_pred=rpn_bbox_pred, im_info=im_info, name='rois',                            # 2000*5
             feature_stride=config.RPN_FEAT_STRIDE, scales=tuple(config.ANCHOR_SCALES), ratios=tuple(config.ANCHOR_RATIOS),
             rpn_pre_nms_top_n=config.TRAIN.RPN_PRE_NMS_TOP_N, rpn_post_nms_top_n=config.TRAIN.RPN_POST_NMS_TOP_N,
             threshold=config.TRAIN.RPN_NMS_THRESH, rpn_min_size=config.TRAIN.RPN_MIN_SIZE)
@@ -123,16 +123,16 @@ def get_resnet_train(num_classes=config.NUM_CLASSES, num_anchors=config.NUM_ANCH
                              batch_images=config.TRAIN.BATCH_IMAGES,
                              batch_rois=config.TRAIN.BATCH_ROIS, fg_fraction=config.TRAIN.FG_FRACTION)
 	
-    rois = group[0]
-    label = group[1]
-    bbox_target = group[2]
-    bbox_weight = group[3]
-    mask_reg_targets = group[4]
+    rois = group[0]                 # rois*5 
+    label = group[1]                # rois
+    bbox_target = group[2]          # rois*(numclass*4)
+    bbox_weight = group[3]          # ..
+    mask_reg_targets = group[4]     # rois*1*masksize*masksize
 
     # Fast R-CNN
     if config.USE_ROI_ALIGN:
         roi_pool = mx.symbol.ROIAlign(
-            name='roi_pool5', data=conv_feat, rois=rois, pooled_size=(14, 14), spatial_scale=1.0 / config.RCNN_FEAT_STRIDE)
+            name='roi_pool5', data=conv_feat, rois=rois, pooled_size=(14, 14), spatial_scale=1.0 / config.RCNN_FEAT_STRIDE)      # rois*1024*masksize*masksize
     else:
         roi_pool = mx.symbol.ROIPooling(
             name='roi_pool5', data=conv_feat, rois=rois, pooled_size=(14, 14), spatial_scale=1.0 / config.RCNN_FEAT_STRIDE)
