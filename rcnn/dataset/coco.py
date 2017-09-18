@@ -19,6 +19,7 @@ from ..utils.mask_coco2voc import mask_coco2voc
 from ..utils.mask_voc2coco import mask_voc2coco
 
 from rcnn.processing.bbox_transform import clip_boxes
+from rcnn.config import dataset
 
 def coco_results_one_category_kernel(data_pack):
     cat_id = data_pack['cat_id']
@@ -109,7 +110,7 @@ class coco(IMDB):
                                             for cls in self.classes[1:]])
 
         # load image file names
-        self.image_set_index = self._load_image_set_index()[:10000]
+        self.image_set_index = self._load_image_set_index()[:dataset.coco.NUM_IMAGES_USING]
         self.num_images = len(self.image_set_index)
         logger.info('%s num_images %d' % (self.name, self.num_images))
         self.mask_size = mask_size

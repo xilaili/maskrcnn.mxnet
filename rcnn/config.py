@@ -159,6 +159,7 @@ dataset.coco.test_image_set = 'val2014'
 dataset.coco.root_path = '../data'
 dataset.coco.dataset_path = '../data/coco'
 dataset.coco.NUM_CLASSES = 81
+dataset.coco.NUM_IMAGES_USING = -1
 
 
 def generate_config(_network, _dataset):

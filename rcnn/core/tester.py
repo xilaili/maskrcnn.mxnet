@@ -20,6 +20,8 @@ from rcnn.processing.nms import py_nms_wrapper
 from rcnn.utils.PrefetchingIter import PrefetchingIter
 from rcnn.mask.mask_transform import gpu_mask_voting, cpu_mask_voting
 
+NMS_THRESH = 0.3
+CONF_THRESH = 0.7
 
 class Predictor(object):
     def __init__(self, symbol, data_names, label_names,
@@ -149,9 +151,6 @@ def im_detect(predictor, data_batch, data_names, scales):
 
 
 def pred_eval(predictor, test_data, imdb, vis=False, thresh=1e-3, logger=None, ignore_cache=False):
-
-    print test_data.data
-
     det_file = os.path.join(imdb.result_path, imdb.name + '_detections.pkl')
     seg_file = os.path.join(imdb.result_path, imdb.name + '_masks.pkl')
 
@@ -181,9 +180,9 @@ def pred_eval(predictor, test_data, imdb, vis=False, thresh=1e-3, logger=None, i
 
         idx = 0
         t = time.time()
+        print "start testing loop"
         for data_batch in test_data:
             data_batch = data_batch[1]
-            print data_batch.data
             t1 = time.time() - t
             t = time.time()
 
@@ -196,7 +195,7 @@ def pred_eval(predictor, test_data, imdb, vis=False, thresh=1e-3, logger=None, i
 
             # post processing
             for delta, (scores, boxes, masks, data_dict) in enumerate(zip(scores_all, boxes_all, masks_all, data_dict_all)):
-
+                # mask output
                 if not config.TEST.USE_MASK_MERGE:
                     for j in range(1, imdb.num_classes):
                         indexes = np.where(scores[:, j] > thresh)[0]
@@ -218,8 +217,8 @@ def pred_eval(predictor, test_data, imdb, vis=False, thresh=1e-3, logger=None, i
                     masks = masks[:, 1:, :, :]
                     im_height = np.round(im_shapes[delta][0] / scales[delta]).astype('int')
                     im_width = np.round(im_shapes[delta][1] / scales[delta]).astype('int')
-                    boxes = clip_boxes(boxes, (im_height, im_width))
-                    result_mask, result_box = mask_voting(masks, boxes, scores, imdb.num_classes,
+                    boxes_ = clip_boxes(boxes, (im_height, im_width))
+                    result_mask, result_box = mask_voting(masks, boxes_, scores, imdb.num_classes,
                                                           max_per_image, im_width, im_height,
                                                           config.TEST.NMS, config.TEST.MASK_MERGE_THRESH,
                                                           config.BINARY_THRESH)
@@ -227,10 +226,27 @@ def pred_eval(predictor, test_data, imdb, vis=False, thresh=1e-3, logger=None, i
                         all_boxes[j][idx+delta] = result_box[j]
                         all_masks[j][idx+delta] = result_mask[j][:,0,:,:]
 
+                # box output
+                all_boxes_ = [[] for _ in imdb.classes[1:]]
+                nms = py_nms_wrapper(NMS_THRESH)
+                for cls in imdb.classes[1:]:
+                    cls_ind = imdb.classes.index(cls)
+                    cls_boxes = boxes[:, 4 * cls_ind:4 * (cls_ind + 1)]
+                    cls_scores = scores[:, cls_ind, np.newaxis]
+                    keep = np.where(cls_scores >= CONF_THRESH)[0]
+                    #print cls, keep
+                    dets = np.hstack((cls_boxes, cls_scores)).astype(np.float32)[keep, :]
+                    keep = nms(dets)
+                    all_boxes_[cls_ind-1] = dets[keep, :]
+
+                boxes_this_image_ = [all_boxes_[j] for j in range(len(imdb.classes)-1)]
+
+
                 if vis:
                     boxes_this_image = [[]] + [all_boxes[j][idx + delta] for j in range(1, imdb.num_classes)]
                     masks_this_image = [[]] + [all_masks[j][idx + delta] for j in range(1, imdb.num_classes)]
                     vis_all_mask(data_dict['data'].asnumpy(), boxes_this_image, masks_this_image, imdb.classes, scales[delta])
+                    vis_all_detection(data_dict['data'].asnumpy(), boxes_this_image_, imdb.classes[1:], scales[delta])
 
             idx += test_data.batch_size
             t3 = time.time() - t
@@ -239,7 +255,7 @@ def pred_eval(predictor, test_data, imdb, vis=False, thresh=1e-3, logger=None, i
             print 'testing {}/{} data {:.4f}s net {:.4f}s post {:.4f}s'.format(idx, imdb.num_images, t1, t2, t3)
             if logger:
                 logger.info('testing {}/{} data {:.4f}s net {:.4f}s post {:.4f}s'.format(idx, imdb.num_images, t1, t2, t3))
-            
+
         with open(det_file, 'wb') as f:
             cPickle.dump(all_boxes, f, protocol=cPickle.HIGHEST_PROTOCOL)
         with open(seg_file, 'wb') as f:
@@ -249,7 +265,7 @@ def pred_eval(predictor, test_data, imdb, vis=False, thresh=1e-3, logger=None, i
     if logger:
         logger.info('evaluate detections: \n{}'.format(info_str))
 
-        
+
 def vis_all_mask(im_array, detections, masks, class_names, scale):
     """
     visualize all detections in one image
@@ -359,4 +375,4 @@ def draw_all_detection(im_array, detections, class_names, scale):
             cv2.rectangle(im, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color=color, thickness=2)
             cv2.putText(im, '%s %.3f' % (class_names[j], score), (bbox[0], bbox[1] + 10),
                         color=color_white, fontFace=cv2.FONT_HERSHEY_COMPLEX, fontScale=0.5)
-    return im   
+    return im
